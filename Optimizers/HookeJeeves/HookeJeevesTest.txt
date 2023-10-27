@@ -1,0 +1,30 @@
+#include "HookeJeeves.int.txt"
+
+Aircraft AC
+{
+	AC.THRUST = 50000;
+	AC.SW = 300;
+}
+
+HookeJeeves hj
+{
+	DesignVariable x1{ varName = "AC.THRUST"; perturbation = 5000; setOption("perturbationType", "ABSOLUTE"); };
+	DesignVariable x2{ varName = "AC.SW"; perturbation = 100; setOption("perturbationType", "ABSOLUTE"); };
+	Limit l1{ bigger = "11000"; smaller = "AC.TOFL"; };
+	Limit l2{ bigger = "135"; smaller = "AC.VAPP"; };
+	step = 1;
+	assembly = "AC";
+	
+	real objective()
+	{
+		return - AC.TOGW;
+	}
+}
+
+hj.run();
+
+cout << AC.THRUST << endl;
+cout << AC.SW << endl;
+cout << AC.TOGW << endl;
+cout << AC.VAPP << endl;
+cout << AC.TOFL << endl;
