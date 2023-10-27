@@ -1,0 +1,229 @@
+
+//------------------------------------------------------------------------------
+//  Paint runs every point in a grid an picks the best one
+//------------------------------------------------------------------------------
+//----------------------------------------------------------------------------
+// Limit obect to impose a constraint
+//----------------------------------------------------------------------------
+class Limit extends VariableContainer {
+	
+	description = "Limit obect to provide design constratints bu comparing two 
+	equations.";
+	
+	string bigger{
+		description = "Equation that must be the bigger of the two";
+	}
+	
+	string smaller{
+		description = "Equation that must be the smaller of the two";	
+	}
+}
+
+//------------------------------------------------------------------------------
+// Design variable object to allowed for variable to be changed
+//------------------------------------------------------------------------------
+class DesignVariable extends VariableContainer {
+	description = "Design varuable obect";
+	
+	string varName{
+		description =  "Name of varaible to be changed";	
+	}
+	
+	real minimum{
+		description = "Minimum value";	
+	}
+	
+	real maximum{
+		description = "Maximum value";	
+	}
+	
+	int numSteps{
+		description = "Number of steps to take for first frame";	
+	}
+	
+	real stepAmnt{
+		description = "Step size";	
+	}
+	
+	real bestVal{
+		description = "Value of this variable at the optimum";	
+	}
+	
+	int counter{
+		description = "Counter to help recursion";	
+	}
+	
+}
+
+//------------------------------------------------------------------------------
+// Paint functionality
+//------------------------------------------------------------------------------
+class Paint extends Element {
+	
+	string assembly{
+		value = ".";
+		description = "Assembly that is to be run bu thge optimier.  Default is
+		the top level assembly.";
+	}
+	
+	int consBool{
+		value = 0.;
+		description = ""; //What the hell is this?
+	}
+	
+	real bestObj = -100000000;
+	
+	int numFrames{
+		description = "Number of times to zoom in";	
+	}
+	
+	string indList[];
+	indList{
+		description = "List of independents optimizer is varying.";
+	}
+	
+	string limList[];
+	limList{
+		description = "List of limts the optimizer is varying.";	
+	}
+	
+	
+	//----------------------------------------------------------------------
+	//  add indepedents and limits to the active list
+	//----------------------------------------------------------------------
+	void postcreate(string name)
+	{
+		int i;
+		
+		if(name -> hasInterface("DesignVariable"))
+		{
+			indList.append(name);
+		}
+		
+		if(name -> hasInterface("Limit"))
+		{
+			limList.append(name);
+			consBool = 1;
+		}
+	}
+	
+	//--------------------------------------------------------------------------
+	// check to see if constraints are broken
+	//--------------------------------------------------------------------------
+	real check_constraints( string limList[ ] ){
+		
+		// check constraints if they are active
+		if(consBool == 1){
+			return constraint(limList);
+		}
+		
+		// there are no constratinst this is easy
+		return 0;
+	}	
+	
+	//--------------------------------------------------------------------------
+	// Iterates through all defined points and stores the values for the best 
+	// point in all of the DesignVariable(s)
+	// Recursion is used because the number of dimensions is not predefined
+	//--------------------------------------------------------------------------
+	void best_point(string indList[], real currentDim, real numDim)
+	{
+		int i;
+		int j;
+		int k;
+		
+		// Find step amount for for loop
+		indList[currentDim] -> stepAmnt = (indList[currentDim] -> maximum - indList[currentDim] -> minimum) / (indList[currentDim] -> numSteps - 1);
+		
+		// If we are not at the final dimension to define a point
+		if ( currentDim < numDim - 1 ){
+			for(k = 0; k < indList[currentDim] -> numSteps; k++){
+			    indList[currentDim]->counter = k;
+				(indList[currentDim]->varName)->value = indList[currentDim]->minimum + indList[currentDim]->stepAmnt * k;
+				
+				best_point(indList, currentDim + 1, numDim);
+			    k = indList[currentDim] -> counter;
+			}
+		}
+		
+		// We have all of the information to describe a point
+		else{
+			for( i = 0; i < indList[currentDim]->numSteps; i++ ){
+				(indList[currentDim] -> varName)->value = indList[currentDim] -> minimum + indList[currentDim]->stepAmnt * i;
+				
+				assembly->run();
+				
+				if( objective() > bestObj && check_constraints(limList) == 0 ){	
+					for ( j = 0; j < indList.entries(); j++ ){
+						indList[j]->bestVal = (indList[j]->varName)->value;
+					}
+					bestObj = objective();
+				}
+			}
+		}
+		currentDim -= 1;
+	}
+	
+	//--------------------------------------------------------------------------
+	// Prepares the independents to perform a paint again by adjusting the 
+	// bounds to +/- the step size of the last computation
+	//--------------------------------------------------------------------------
+	void adjust_frame( string indList[] ){
+		int i;
+		
+		for ( i = 0; i < indList.entries(); i++ ){	
+			indList[i]->stepAmnt = indList[i]->stepAmnt / (indList[i]->numSteps);
+			
+			// Respect set maximum
+			if (( indList[i]->bestVal + indList[i]->stepAmnt) > indList[i]->minimum ){
+				indList[i]->minimum = indList[i]->bestVal - indList[i]->stepAmnt;
+			}
+			
+			// Respect set minimum
+			if (( indList[i]->bestVal + indList[i]->stepAmnt) < indList[i]->maximum ){
+				indList[i]->maximum = indList[i]->bestVal + indList[i]->stepAmnt;
+			}
+		}
+	}
+	
+	//-------------------------------------------------------------------------
+	//  calculate function
+	//-------------------------------------------------------------------------
+	void calculate(){
+		int i;
+		
+		// loop through the frames
+		for ( i = 0; i < numFrames; i++ ){
+			best_point(indList, 0, indList.entries());
+			adjust_frame(indList);
+		}
+		
+		// leave with the best design
+		for ( i = 0; i < indList.entries(); i++ ){
+			(indList[i]->varName)->value = indList[i]->bestVal;
+		}
+		assembly->run();
+	}
+	
+	//--------------------------------------------------------------------------
+	// loop through the constraint list to see how bad the design is
+	//--------------------------------------------------------------------------
+	real constraint( string limList[] ){
+		real bad_val = 0;
+        int i;
+        
+        for ( i = 0; i < limList.entries(); i++ ){
+        	
+        	// evaluate both sides of the expression
+        	real rhs = evalExpr(limList[i] -> bigger);
+        	real lhs = evalExpr(limList[i] -> smaller);
+			
+        	// if smaller > bigger then the constraint is violated
+			if ( lhs > rhs ){
+				// increase the overall badness by a specific amount
+				bad_val = bad_val + (lhs - rhs) / abs(rhs); // rhs can not evaluate to zero
+			}
+		}
+		return bad_val;
+	}
+}

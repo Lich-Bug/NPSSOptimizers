@@ -1,0 +1,40 @@
+#include "HookeJeeves.int"
+#include "Aircraft.int"
+
+// create a dummy aircrart
+Aircraft AC{
+	AC.THRUST = 60000;
+	AC.SW = 500;
+        AC.AR =7;	
+}
+
+// declare hj element
+HookeJeeves hj{
+	
+	// cr eate design variables
+	DesignVariable x1{ varName = "AC.THRUST"; };
+	DesignVariable x2{ varName = "AC.SW"; };
+	
+	// create limits
+	Limit l1{ bigger = "11000"; smaller = "AC.TOFL"; };  // TOFL < 11000
+ 	Limit l2{ bigger = "135"; smaller = "AC.VAPP"; };    // VAPP < 135
+	step = 1;
+	
+	// tell the hj what assembly to optimize
+	assembly = "AC";
+	
+	// define objective function
+	// this is to minimize TOGW
+	real objective(){
+		return - AC.TOGW;
+	}
+}
+
+// fire off the optimization
+hj.run();
+
+cout << AC.THRUST << endl;
+cout << AC.SW << endl;
+cout << AC.TOGW << endl;
+cout << AC.VAPP << endl;
+cout << AC.TOFL << endl;
