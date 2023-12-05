@@ -1,35 +1,83 @@
 #include "Paint.int"
 
-Aircraft AC{
-	THRUST = 45000;
-	SW = 200;
-	AR = 6;
-}
-
-Paint p{
+Aircraft AC
+{
+	AC.THRUST = 50000;
+	AC.SW = 300;
+	AC.AR = 7;
 	
-	// create design variables
-	DesignVariable x1{ varName = "AC.THRUST"; minimum = 40000; maximum = 80000; numSteps = 100; };
-	DesignVariable x2{ varName = "AC.SW"; minimum = 150; maximum = 550; numSteps = 100; };
-	DesignVariable x3{ varName = "AC.AR"; minimum = 5; maximum = 8; numSteps = 100; };
-	
-	// add limits
-	Limit l1{ bigger = "11000"; smaller = "AC.TOFL"; };
-	Limit l2{ bigger = "135"; smaller = "AC.VAPP"; };
-	numFrames = 3;
-	assembly = "AC";
-	
-	// define ojective funciton
-	real objective()
+	void postexecute()
 	{
-		return -AC.TOGW;
+	   cerr << "THRUST: " << THRUST << endl;
+	   cerr << "SW: " << SW << endl;
+	   cerr << "AR: " << AR << endl;
+	   cerr << "TOGW: " << TOGW << endl;
+	   cerr << "TOFL: " << TOFL << endl;
+	   cerr << "VAPP: " << VAPP << endl;
+	   cerr << endl; endl;
 	}
 }
 
-p.run();
+Paint p
+{
+	numFrames = 3;
 
-cout << AC.THRUST << endl;
-cout << AC.SW << endl;
-cout << AC.TOGW << endl;
-cout << AC.TOFL << endl;
-cout << AC.VAPP << endl;
+	// vary engine size
+	DesignVariable x1
+	{
+		active = "TRUE"; 
+		varName = "AC.THRUST"; 
+		minimum = 40000;
+		maximum = 80000;
+		numSteps = 10;
+	};
+	
+	// vary wing area
+	DesignVariable x2
+	{ 
+		active = "TRUE"; 
+		varName = "AC.SW"; 
+		minimum = 150;
+		maximum = 550;
+		numSteps = 10;
+	};
+	
+	// vart aspect ratio
+	DesignVariable x3
+	{ 
+		active = "TRUE"; 
+		varName = "AC.AR"; 
+		varName = "AC.AR";
+		minimum = 5;
+		maximum = 8;
+		numSteps = 10; 
+	};
+	
+	// Take-off field lenght must be less than 11000 ft
+	Limit L1
+	{ 
+		active = "TRUE"; 
+		bigger = "11000";
+		smaller = "AC.TOFL"; 
+	};
+	
+	// approach velocity must be less than 135 kts
+	Limit L2
+	{ 
+		active = "TRUE"; 
+		bigger = "135";
+		smaller = "AC.VAPP"; 
+	};
+
+	// define the NPSS assembly to be optimized
+	assembly = "AC";
+	
+	// define the objective function
+	real objective()
+	{
+		return - AC.TOGW;
+	}
+}
+
+p.verify();
+p.run();
