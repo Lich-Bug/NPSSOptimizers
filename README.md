@@ -20,3 +20,14 @@ Example implementation of an aircraft
 
 [**Paint:**](Optimizers/Paint/Paint.int)  
 Implementation of the Paint class
+
+## [**FiniteDifference**](Optimizers/FiniteDifferenceGradientDescent)  
+[**FiniteDifferenceTest:**](Optimizers/FiniteDifferenceGradientDescent/FiniteDifferenceTest.run)  
+Test file with an example use of the implemented FiniteDifference
+
+[**Aircraft:**](Optimizers/FiniteDifferenceGradientDescent/aircraft.int)  
+Example implementation of an aircraft 
+
+[**FiniteDifference:**](Optimizers/FiniteDifferenceGradientDescent/FiniteDifference.int)  
+Implementation of the FiniteDifference class
+
