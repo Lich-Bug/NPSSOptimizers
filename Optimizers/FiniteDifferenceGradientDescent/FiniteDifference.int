@@ -38,10 +38,12 @@ class DesignVariable extends VariableContainer {
 	
 	Option active{
 		allowedValues = { "TRUE", "FALSE" }
+        trigger = FALSE;
 	}
 	
 	Option perturbationType { 
 		allowedValues = {"FRACTIONAL", "ABSOLUTE"};
+		trigger = FALSE;
 	};
 }
 
@@ -72,7 +74,7 @@ class FiniteDifference extends Element {
 	string limList[];
 	limList.description = "Current active limits";
 	
-	real step{
+	real stepIn{
 		description = "Maximum relative step size for any design variable.  All other design variables will scale off of the largest design variable gradient";	     
 	}
 	
@@ -81,10 +83,11 @@ class FiniteDifference extends Element {
 		description =  "minimum value of objective improvement that must be meet to continue searching";
 	}
 	
-	real s_Pen{
+	real s_PenIn{
 		value = 1.;	
 		description = "scale factor on the penalty function";
 	}
+	real step, s_Pen;
 	
 	//-------------------------------------------------------------------
 	//  verify function is used to set the active independent 
@@ -243,6 +246,9 @@ class FiniteDifference extends Element {
 		// Take objective value
 		real objVal = objPen();
 		
+	    step = stepIn;
+		s_Pen = s_PenIn;
+
 		// while the objective is not increasing more than a certain value by the user (MAY NEED MOMENTUM IN THE //FUTURE)
 		do
 		{

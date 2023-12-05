@@ -1,5 +1,5 @@
 #include "FiniteDifference.int"
-#include "aircraft"
+#include "aircraft.int"
 
 //-------------------------------------------------------------
 // create dummy aircraft element to give us something
@@ -60,12 +60,12 @@ FiniteDifference fd{
 	};
 	
 	// set the default step size for the linear search
-	step = .1;
-	
+	stepIn = .1;
+
 	// define the NPSS assembly to be optimized
 	assembly = "AC";
 	
-	s_Pen =  4.;
+	s_PenIn =  4.;
 	
 	// define the objective function
 	real objective(){
@@ -79,4 +79,7 @@ fd.verify();
 fd.run();
 
 
-
+fd.x2.active = "FALSE";
+fd.L2.active = "FALSE";
+fd.verify();
+fd.run();
