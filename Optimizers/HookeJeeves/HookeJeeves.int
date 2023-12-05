@@ -1,375 +1,331 @@
-//------------------------------------------------------------------------------
-// Classes to impliment HookeJeeves is implemented using Stanford's Steps
-//-----------------------------------------------------------------------------
+#include "aircraft.int"
 
-//----------------------------------------------------------------------------
-// Limit obect to impose a constraint
-//----------------------------------------------------------------------------
+// HookeJeeves is implemented using Stanford's Steps
+
 class Limit extends VariableContainer {
+	string bigger;
+
+	string smaller;
 	
-	description = "Limit obect to provide design constratints bu comparing two 
-	equations.";
-	
-	string bigger{
-		description = "Equation that must be the bigger of the two";
-	}
-	
-	string smaller{
-		description = "Equation that must be the smaller of the two";	
+	Option active
+	{
+		allowedValues = { "TRUE", "FALSE" }
+        trigger = FALSE;
 	}
 }
 
-//------------------------------------------------------------------------------
-// Design variable object to allowed for variable to be changed
-//------------------------------------------------------------------------------
 class DesignVariable extends VariableContainer {
-	description = "Design variable obect";
+	string varName;
 	
-	string varName{
-		description =  "Name of varaible to be changed";	
+	real perturbation;
+	
+	Option perturbationType { allowedValues = {"FRACTIONAL", "ABSOLUTE"}; trigger = FALSE; };
+	
+	Option active
+	{
+		allowedValues = { "TRUE", "FALSE" }
+        trigger = FALSE;
 	}
-	
-	real perturbation{
-		value = .01;
-		description = "Amount to change the variable";	
-	}
-	
-	Option perturbationType { 
-		allowedValues = { "FRACTIONAL", "ABSOLUTE" }; 
-		trigger = FALSE; 
-	};
 }
 
-//----------------------------------------------------------------------------
-// HookeJeeve calculations
-//---------------------------------------------------------------------------
 class HookeJeeves extends Element {
+	string assembly = ".";
 	
-	string assembly{
-		value = ".";
-		description = "Assembly that is to be run bu thge optimier.  Default is
-		the top level assembly.";
-	}
-	
-	int consBool{
-		value = 0.;
-		description = ""; //What the hell is this?
-	}
-	
+	int consBool = 0;
+
 	string indList[];
-	indList{
-		description = "List of independents optimizer is varying.";
-	}
 	
 	string limList[];
-	limList{
-		description = "List of limts the optimizer is varying.";	
-	}
+
+	real step;
+	real perturbScale;
 	
-	real step{
-		value = 1.;
-		description =  "Step size for the optmizer.  Gets tighter for each step.";	
-	}
+	Aircraft aircraft;
 	
-	//----------------------------------------------------------------------
-	//  add indepedents and limits to the active list
-	//----------------------------------------------------------------------
-	void postcreate(string name){
-		int i;
-		
-		if(name -> hasInterface("DesignVariable")){
+	void postcreate(string name)
+	{
+		if(name -> hasInterface("DesignVariable"))
+		{
 			indList.append(name);
 		}
 		
-		if(name -> hasInterface("Limit")){
+		if(name -> hasInterface("Limit"))
+		{
 			limList.append(name);
 			consBool = 1;
 		}
 	}
 	
-	//-------------------------------------------------------------------------
+	int verify()
+	{
+		int i;
+		
+		// Re-Initialize variable lists
+		indList = {}
+		limList = {}
+		
+		// Load the variable lists
+		string designVariables[] = list("DesignVariable");
+		string limits[] = list("Limit");
+		
+		// Determine Active variables
+		for(i = 0; i< designVariables.entries(); i++){
+			if(designVariables[i] -> active == "TRUE"){
+				indList.append(designVariables[i]);
+			}
+		}
+		
+		// Determine active Limits
+		for(i = 0; i < limits.entries(); i++){
+			if(limits[i]->active == "TRUE"){
+				limList.append(limits[i]);
+			}
+		}
+		
+		return TRUE;
+	}
+	
 	// Perturbs a value based on a perturbValue and a perturbTypeList
-	//-------------------------------------------------------------------------
-	real perturb(real val, real perturbVal, string type, real step_val){
-		if ( type == "ABSOLUTE" ){
-			return perturbVal*step;
+	real perturb(real val, real perturbVal, string type, real step_val)
+	{
+		if(type == "ABSOLUTE")
+		{
+			return perturbVal * step;
 		}
-		else if ( type == "FRACTIONAL" ){
-			return val*perturbVal*step;
+		else if(type == "FRACTIONAL")
+		{
+			return val * perturbVal * step;
 		}
-		else{
+		else
+		{
 			return 0;
 		}
 	}
 	
-	//-------------------------------------------------------------------------
-	//  First step is to obatin a valid solution that satisfies the contriants
-	//--------------------------------------------------------------------------
-	void find_constraints( string indList[], string limList[], real step ){
+	// Modifies the argument indList[] to fit the constraints of the problem;
+	void find_constraints(string indList[], string limList[], real step)
+	{
 		int i = 0;
 		
+		real bestCon = 100000000; // Infinity
 		real bestVal[];
-		// set the start point for the best saved value
-		real bestCon = inf; // Infinity
-		for(i = 0; i < indList.entries(); i++){
-			bestVal.append(-inf); // Negative infinity
+		
+		for(i = 0; i < indList.entries(); i++)
+		{
+			bestVal.append(-666666666); // Negative infinity
 		}
 		
-		assembly->run();
+		assembly -> run();
 		
-		//--------------------------------------------------------------------
-		// if there are any constraint, need to make sure intial guess
-		// satisfies them.  Keep looping until we have valid disign
-		//--------------------------------------------------------------------
-		while (constraint(limList) > 0){
-			// loop through the independents
-			for (i = 0; i < indList.entries(); i++){
-				
-				// run the model
-				assembly->run();
-				
-				// does the model look better with respect to constraints
-				// if so, update best value
-				if (constraint(limList) < bestCon){
+		while(check_constraints(limList) > 0)
+		{
+			for(i = 0; i < indList.entries(); i++)
+			{
+				assembly -> run();
+			
+				if(check_constraints(limList) < bestCon)
+				{
 					bestCon = constraint(limList);
-					bestVal[i] = (indList[i]->varName)->value;
+					bestVal[i] = (indList[i] -> varName) -> value;
 				}
+
+				(indList[i] -> varName) -> value += perturb((indList[i] -> varName) -> value, indList[i] -> perturbation, indList[i] -> perturbationType, step);
+
 				
-				// step the independent value
-				(indList[i]->varName)->value += perturb (( indList[i]->varName)->value, indList[i]->perturbation, indList[i]->perturbationType, step );
+				assembly -> run();
 				
-				// rerun the model
-				assembly->run();
-				
-				
-				// does the model look better with respect to constraints
-				// if so, update best value
-				if (constraint(limList) < bestCon){
+
+				if(check_constraints(limList) < bestCon)
+				{
 					bestCon = constraint(limList);
-					bestVal[i] = (indList[i]->varName)->value;
+					bestVal[i] = (indList[i] -> varName) -> value;
 				}
+
+
+				(indList[i] -> varName) -> value -= 2 * perturb((indList[i] -> varName) -> value, indList[i] -> perturbation, indList[i] -> perturbationType, step);
+
 				
+				assembly -> run();
 				
-				// step in the other direction
-				(indList[i]->varName)->value -= 2*perturb(( indList[i]->varName)->value, indList[i]->perturbation, indList[i]->perturbationType, step );
-				
-				
-				// run the model
-				assembly->run();
-				
-				// does the model look better with respect to constraints
-				// if so, update best value
-				if ( constraint(limList) < bestCon ){
+
+				if(check_constraints(limList) < bestCon)
+				{
 					bestCon = constraint(limList);
-					bestVal[i] = (indList[i]->varName)->value;
+					bestVal[i] = (indList[i] -> varName) -> value;
 				}
-				
-				// load in the best value
-				(indList[i] -> varName)->value = bestVal[i];
-				assembly->run();
+	
+
+				(indList[i] -> varName) -> value = bestVal[i];
+				assembly -> run();
 			}
 		}
 	}
 	
-	//--------------------------------------------------------------------------
-	// check to see if constraints are broken
-	//--------------------------------------------------------------------------
-	real check_constraints( string limList[ ] ){
-		
-		// check constraints if they are active
-		if(consBool == 1){
+	real check_constraints(string limList[])
+	{
+		if(consBool == 1)
+		{
 			return constraint(limList);
 		}
 		
-		// there are no constratinst this is easy
 		return 0;
 	}	
 	
-	//--------------------------------------------------------------------------
-	// Finds the vector to the best point in the neighborhood 
-	// (determined by step) of a point with dimensions indList[]
-	//--------------------------------------------------------------------------
-	real[] bestNeighbor(string indList[], string limList[], real step){	
-		
-		real origPoint [];
-		real bestPoint[];
-		real bestVector[];
+	// Finds the vector to the best point in the neighborhood (determined by step) of a point with dimensions indList[]
+	real[] bestNeighbor(string indList[], string limList[], real step)
+	{	
+		real origPoint [] = {};
+		real bestPoint[] = {};
+		real bestVector[] = {};
 		real bestInDimension;
 		real bestObj;
 		
-		int i,j;
-		origPoint = {};
-		bestPoint = {};
-		bestVector = {};
+		int i;
 		
-		assembly->run();
-		bestObj = objective();
+		assembly -> run();
 		
 		// Find best neighboring point in length of indList dimensions while obeying constraints
-		for( i=0; i < indList.entries(); i++ ){	
-			origPoint.append((indList[i]->varName)->value);
+		for(i = 0; i < indList.entries(); i++)
+		{	
+			origPoint.append((indList[i] -> varName) -> value);
+		
 			bestObj = objective();
-			bestInDimension = (indList[i] ->varName)->value;
-			(indList[i]->varName)->value += step;
-			
-			assembly->run();
-			
-			if(objective() > bestObj && check_constraints(limList) == 0){
+			bestInDimension = (indList[i] -> varName) -> value;
+			(indList[i] -> varName) -> value += perturb((indList[i] -> varName) -> value, indList[i] -> perturbation, indList[i] -> perturbationType, step);
+
+			assembly -> run();
+
+			if(objective() > bestObj && check_constraints(limList) == 0)
+			{
 				bestObj = objective();
-				bestInDimension = (indList[i]->varName)->value;
+				bestInDimension = (indList[i] -> varName) -> value;
+			}
+
+
+			(indList[i] -> varName) -> value -= 2 * perturb((indList[i] -> varName) -> value, indList[i] -> perturbation, indList[i] -> perturbationType, step);
+
+				
+			assembly -> run();
+
+			if(objective() > bestObj && check_constraints(limList) == 0)
+			{
+				bestObj = objective();
+				bestInDimension = (indList[i] -> varName) -> value;
 			}
 			
+			(indList[i] -> varName) -> value = bestInDimension; // Sets point
+			bestPoint.append(bestInDimension);
 			
-			(indList[i] -> varName)->value -= 2 * perturb(( indList[i]->varName)->value, indList[i]->perturbation, indList[i]->perturbationType, step );
-			
-			assembly->run();
-			
-			if(objective() > bestObj && check_constraints(limList) == 0){
-				bestObj = objective();
-				bestInDimension = (indList[i]->varName)->value;
-			}
-			
-			(indList[i]->varName)->value = bestInDimension; // Sets point
-			bestPoint.append( bestInDimension );
-			
-			assembly->run();
+			assembly -> run();
 		}
 		
 		// Find the vector to the best point from the original point
-		for( i = 0; i < bestPoint.entries(); i++ ){
+		for(i = 0; i < bestPoint.entries(); i++)
+		{
 			bestVector.append(bestPoint[i] - origPoint[i]);
 		}
 		
 		return bestVector;
 	}
 	
-	//--------------------------------------------------------------------------
 	// Returns new point from old point in direction vector
-	//--------------------------------------------------------------------------
-	real[] searchInDirection(string indList[], real vector[]){
+	real[] searchInDirection(string indList[], real vector[])
+	{
 		int i;
 		real newPoint[] = {};
 		
-		// determine the new point
-		for ( i = 0; i < indList.entries(); i++ ){
-			newPoint.append(( indList[i] -> varName) -> value + vector[i] );
+		for(i = 0; i < indList.entries(); i++)
+		{
+			newPoint.append((indList[i] -> varName) -> value + vector[i]);
 		}
+		
 		return newPoint;
 	}
 	
-	//--------------------------------------------------------------------------
 	// Returns the magnitude of a vector (represented by real[])
-	//--------------------------------------------------------------------------
-	real magnitude ( real vector[] ){
-		
+	real magnitude(real vector[])
+	{
 		real sum = 0;
 		int i;
 		
-		for ( i = 0; i < vector.entries(); i++ ){
+		for(i = 0; i < vector.entries(); i++)
+		{
 			sum += vector[i] ** 2;
 		}
 		
-		return sum**(0.5);
+		return sum ** (0.5);
 	}
 	
-	//--------------------------------------------------------------------------
-	// calculate function
-	//--------------------------------------------------------------------------
-	void calculate(){
-		
-		real bestVector[];  // best direction to move in
-		real newPoint[];    // next point to try
-		real lastObj = -inf; // Negative Infinity
+	void calculate ()
+	{
+		real bestVector[];
+		real newPoint[]; 
+		real lastObj = -99999999; // Negative Infinity; Technically unnecessary here, but good for understanding
 		real bestVals[];
 		int i;
 		
 		// Step 0: Find values that fit the constraints for the problem before optimizing
-		find_constraints( indList, limList, step );
+		//find_constraints(indList, limList, step);
 		
-		// (Step 5): Repeat Steps 1-4 until interval is small enough
-		while ( step > 0.000001 ){	
-			
+		// (Step 5): Repeat Steps 1-4 until interval is small enough (CAN CHANGE VAL)
+		while(step > 0.000001)
+		{
 			// (Step 3): Repeat Steps 1-2 until Step 1 returns a 0 vector
-			while ( magnitude(bestNeighbor(indList, limList, step )) != 0 ){
-				
+			while(magnitude(bestNeighbor(indList, limList, step)) != 0)
+			{
 				// Step 1: Find the vector to the best point in the neighborhood
-				bestVector = bestNeighbor( indList, limList, step );
+				bestVector = bestNeighbor(indList, limList, step);
+			
+				assembly -> run();
 				
-				// run the model)
-				assembly->run();
-				
-				lastObj = -inf;
+				lastObj = -99999999;
 				bestVals = {};
 				
-				// load the new point into the variable values
-				for ( i = 0; i < indList.entries(); i++ ){
-					bestVals.append( (indList[i] -> varName)->value );
-				}
 				
+				// Step 2: Search in the direction of the best vector until improvement is not seen
+				while(objective() > lastObj && check_constraints(limList) == 0)
+				{
+					newPoint = searchInDirection(indList, bestVector);
 				
-				// Step 2: Search in the direction of the best vector until 
-				// improvement is not seen
-				while ( objective() > lastObj && check_constraints(limList) == 0 ){
-					
-					// determine the next point
-					newPoint = searchInDirection( indList, bestVector );
-					
-					// load the new point into the variable values
-					for ( i = 0; i < indList.entries(); i++ ){
-						(indList[i] -> varName)->value = newPoint[i];
+					for(i = 0; i < indList.entries(); i++)
+					{
+						(indList[i] -> varName) -> value = newPoint[i];
+						
 					}
-					
-					// save previous value
+		
 					lastObj = objective();
 					
-					// run the model
-					assembly->run();
+					assembly -> run();
+					
+					if(check_constraints(limList) == 0) { bestVals =  newPoint; }
 				}
-				// load the new point into the variable values
-				for ( i = 0; i < indList.entries(); i++ ){
-					(indList[i] -> varName)->value=bestVals[i];
+				
+				for(i = 0; i < indList.entries(); i++) // set val to avoid the constraint blowing
+				{
+					(indList[i] -> varName) -> value = bestVals[i];
 				}
 			}
+			
 			// Step 4: Reduce the interval
 			step = step * 0.1;
 		}
 	}
 	
-	//--------------------------------------------------------------------------
-	// loop through the constraint list to see how bad the design is
-	//--------------------------------------------------------------------------
-	real constraint( string limList[] ){
+	real constraint(string limList[])
+	{
 		real bad_val = 0;
-		int i;
-		
-		for ( i = 0; i < limList.entries(); i++ ){
-			
-			// evaluate both sides of the expression
+        int i;
+
+        for (i = 0; i < limList.entries(); i++)
+		{
 			real rhs = evalExpr(limList[i] -> bigger);
-			real lhs = evalExpr(limList[i] -> smaller);
+            real lhs = evalExpr(limList[i] -> smaller);
 			
-			// if smaller > bigger then the constraint is violated
-			if ( lhs > rhs ){
-				// increase the overall badness by a specific amount
+			if (lhs > rhs)
+			{
 				bad_val = bad_val + (lhs - rhs) / abs(rhs); // rhs can not evaluate to zero
 			}
 		}
 		return bad_val;
-	}
-	
-	//----------------------------------------------------------------------
-	//  add indepedents and limits to the active list
-	//----------------------------------------------------------------------
-	void postcreate(string name){
-		int i;
-		
-		if( name->hasInterface("DesignVariable") ){
-			indList.append(name);
-		}
-		
-		if( name->hasInterface("Limit") ){
-			limList.append(name);
-			consBool = 1;
-		}
 	}
 }

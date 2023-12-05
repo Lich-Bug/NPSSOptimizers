@@ -1,40 +1,75 @@
 #include "HookeJeeves.int"
-#include "Aircraft.int"
 
-// create a dummy aircrart
-Aircraft AC{
-	AC.THRUST = 60000;
-	AC.SW = 500;
-        AC.AR =7;	
+Aircraft AC
+{
+	AC.THRUST = 50000;
+	AC.SW = 300;
+	AC.AR = 7;
+	
+	void postexecute()
+	{
+	   cerr << "THRUST: " << THRUST << endl;
+	   cerr << "SW: " << SW << endl;
+	   cerr << "AR: " << AR << endl;
+	   cerr << "TOGW: " << TOGW << endl;
+	   cerr << "TOFL: " << TOFL << endl;
+	   cerr << "VAPP: " << VAPP << endl;
+	   cerr << endl; endl;
+	}
 }
 
-// declare hj element
-HookeJeeves hj{
-	
-	// cr eate design variables
-	DesignVariable x1{ varName = "AC.THRUST"; };
-	DesignVariable x2{ varName = "AC.SW"; };
-	
-	// create limits
-	Limit l1{ bigger = "11000"; smaller = "AC.TOFL"; };  // TOFL < 11000
- 	Limit l2{ bigger = "135"; smaller = "AC.VAPP"; };    // VAPP < 135
+HookeJeeves hj
+{
 	step = 1;
+
+	// vary engine size
+	DesignVariable x1
+	{
+		active = "TRUE"; 
+		varName = "AC.THRUST"; 
+		perturbation = .05; 
+		perturbationType = "FRACTIONAL"; 
+	};
 	
-	// tell the hj what assembly to optimize
+	// vary wing area
+	DesignVariable x2
+	{ 
+		varName = "AC.SW"; 
+		perturbation = .05; 
+		perturbationType = "FRACTIONAL"; 
+	};
+	
+	// vart aspect ratio
+	DesignVariable x3
+	{ 
+		varName = "AC.AR"; 
+		perturbation = .05; 
+		perturbationType = "FRACTIONAL"; 
+	};
+	
+	// Take-off field lenght must be less than 11000 ft
+	Limit L1
+	{ 
+		bigger = "11000"; 
+		smaller = "AC.TOFL"; 
+	};
+	
+	// approach velocity must be less than 135 kts
+	Limit L2
+	{ 
+		bigger = "135"; 
+		smaller = "AC.VAPP"; 
+	};
+
+	// define the NPSS assembly to be optimized
 	assembly = "AC";
 	
-	// define objective function
-	// this is to minimize TOGW
-	real objective(){
+	// define the objective function
+	real objective()
+	{
 		return - AC.TOGW;
 	}
 }
 
-// fire off the optimization
+hj.verify();
 hj.run();
-
-cout << AC.THRUST << endl;
-cout << AC.SW << endl;
-cout << AC.TOGW << endl;
-cout << AC.VAPP << endl;
-cout << AC.TOFL << endl;
