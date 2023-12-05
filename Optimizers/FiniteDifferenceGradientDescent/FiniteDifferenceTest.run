@@ -1,0 +1,82 @@
+#include "FiniteDifference.int"
+#include "aircraft"
+
+//-------------------------------------------------------------
+// create dummy aircraft element to give us something
+// to optimize
+//-------------------------------------------------------------
+Aircraft AC{
+	AC.THRUST = 50000;
+	AC.SW = 300;
+	AC.AR = 7;
+	
+	void postexecute(){
+	   cerr << "THRUST: " << THRUST << endl;
+	   cerr << "SW: " << SW << endl;
+	   cerr << "AR: " << AR << endl;
+	   cerr << "TOGW: " << TOGW << endl;
+	   cerr << "TOFL: " << TOFL << endl;
+	   cerr << "VAPP: " << VAPP << endl;
+	   cerr << endl; endl;
+	}
+}
+
+//----------------------------------------------------------------------
+//  create optimize object
+//----------------------------------------------------------------------
+FiniteDifference fd{
+	
+	// vary engine size
+	DesignVariable x1{
+		active = "TRUE"; 
+		varName = "AC.THRUST"; 
+		perturbation = .05; 
+		perturbationType = "FRACTIONAL"; 
+	};
+	
+	// vary wing area
+	DesignVariable x2{ 
+		varName = "AC.SW"; perturbation = .05; 
+		perturbationType = "FRACTIONAL"; 
+	};
+	
+	// vart aspect ratio
+	DesignVariable x3{ 
+		varName = "AC.AR"; 
+		perturbation = .05; 
+		perturbationType = "FRACTIONAL"; 
+	};
+	
+	// Take-off field lenght must be less than 11000 ft
+	Limit L1{ 
+		bigger = "11000"; 
+		smaller = "AC.TOFL"; 
+	};
+	
+	// approach velocity must be less than 135 kts
+	Limit L2{ 
+		bigger = "135"; 
+		smaller = "AC.VAPP"; 
+	};
+	
+	// set the default step size for the linear search
+	step = .1;
+	
+	// define the NPSS assembly to be optimized
+	assembly = "AC";
+	
+	s_Pen =  4.;
+	
+	// define the objective function
+	real objective(){
+		return AC.TOGW;
+	}
+}
+
+
+// determine which design variables and limits are on
+fd.verify();
+fd.run();
+
+
+

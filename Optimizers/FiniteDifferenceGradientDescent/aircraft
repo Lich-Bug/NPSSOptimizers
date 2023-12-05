@@ -1,0 +1,82 @@
+//---------------------------------------------------------------------
+//  this is dummy element to simulate the trade involved in
+//  desiging an aircraft
+//---------------------------------------------------------------------
+class Aircraft extends Element{
+	
+	//--------------------------------------------------------------------
+	//
+	// Simple proxy model to serve as a test for optimizer
+	// Goal is to minimized TOGW subject to limts on VAPP and TOFL 
+	//
+	//---------------------------------------------------------------------
+	
+	real THRUST{
+		units = "lbf";
+		description = "Engine thrust (single thrust of a 4 engine aircraft)";
+	}
+	
+	real SW{
+		units = "ft2";
+		description = "Wing area";	
+	}
+	
+	real TOGW{
+		units = "lbf";
+		description = "Aircraft TOGW";
+	}
+	
+	real VAPP{
+		units = "nmile/hr";
+		description = "Approach velocuty";
+	}
+	real TOFL{
+		units = "ft";
+		description = "Takeoff field length";
+	}
+	
+	real AR{
+		description = "Wing aspect ratio";
+	}
+	
+	//------------------------------------------------------------------------
+	// Calculate function
+	//------------------------------------------------------------------------
+	void calculate(){
+	
+		//------------------------------------------------------------------
+		// calculate aircraft performance proxies
+		//------------------------------------------------------------------
+		TOGW = 750000.*((THRUST/45000.)**2+(SW/200.)**2)/2.*(1+(AR - 7. )**2);
+		VAPP = 135.*(200./SW);
+		TOFL = 11000*(45000./THRUST)*(200./SW);
+		
+		
+	}
+	
+	
+	
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

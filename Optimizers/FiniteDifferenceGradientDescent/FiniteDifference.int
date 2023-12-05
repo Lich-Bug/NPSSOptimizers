@@ -1,0 +1,320 @@
+//-------------------------------------------------------
+//  limit object
+//-------------------------------------------------------
+class Limit extends VariableContainer {
+	
+	description = "The object tracks two expersions.  The smaller expression 
+	should be less than the larger for the limit not to be violated";
+	
+	string bigger{
+		description =  "Experssion that must be larger for limit to be met";	
+	}
+	
+	string smaller{
+		description =  "Expression that must be smaller for limit to be met";			
+	}
+	
+	Option active{
+		allowedValues = { "TRUE", "FALSE" }
+		trigger = FALSE;
+	}
+}
+
+//--------------------------------------------------------
+//  design variable object
+//--------------------------------------------------------
+class DesignVariable extends VariableContainer {
+	
+	description = "Pointer to a variable in a model that will be modified
+	by the finite difference";
+	
+	string varName{
+		description = "Model variable that is being modified";
+	}
+	
+	real perturbation{
+		description =  "Perturbation size to determine gradient";	
+	}
+	
+	Option active{
+		allowedValues = { "TRUE", "FALSE" }
+	}
+	
+	Option perturbationType { 
+		allowedValues = {"FRACTIONAL", "ABSOLUTE"};
+	};
+}
+
+//-----------------------------------------------------------------
+//  finite difference object
+//-----------------------------------------------------------------
+class FiniteDifference extends Element {
+	
+	description = "Optimization object that will determine the maximum gradient
+	for a design.  It then move in that linear direction until the objective 
+	function stops improving.  It will then calculate a new direction and repeat 
+	the process until the objective stops improving.  
+	
+	Constraints are handled by penalizing the objective function by a certain 
+	amount.
+	
+	Each time a new linear search is performed, the step size is cut in half 
+	and penalty factor is increased by 1.";
+	
+	string assembly{
+		value = ".";
+		description = "Assembly to be optimized";
+	}
+	
+	string indList[];
+	indList.description = "Current active independents";
+	
+	string limList[];
+	limList.description = "Current active limits";
+	
+	real step{
+		description = "Maximum relative step size for any design variable.  All other design variables will scale off of the largest design variable gradient";	     
+	}
+	
+	real minObjDiff {
+		value = .01;
+		description =  "minimum value of objective improvement that must be meet to continue searching";
+	}
+	
+	real s_Pen{
+		value = 1.;	
+		description = "scale factor on the penalty function";
+	}
+	
+	//-------------------------------------------------------------------
+	//  verify function is used to set the active independent 
+	//  and limit lists
+	//-------------------------------------------------------------------
+	int verify(){
+		
+		// zero the active lists out
+		indList = {}
+		limList = {}
+		
+		// determine the design variables and limits
+		string designVariables[] = list( "DesignVariable" );
+		string limits[] = list( "Limit" );
+		
+		// determine the list of active design variables
+		int i;
+		for ( i=0; i< designVariables.entries(); i++ ){
+			if ( designVariables[i]->active == "TRUE" ){
+				indList.append( designVariables[i] );
+				
+			}
+		}
+		
+		// determine the list of active limits
+		for ( i=0; i< limits.entries(); i++ ){
+			if ( limits[i]->active == "TRUE" ){
+				limList.append( limits[i] );
+			}
+		}	   
+		
+		return TRUE;
+	}
+	
+	
+	//--------------------------------------------------------------------
+	// Perturbs a design variable based on a perturbValue and a
+	// perturbTypeList
+	//--------------------------------------------------------------------
+	real perturb(real val, real perturbVal, string type, real step_val){
+		
+		// absolute perturbation requested
+		if ( type == "ABSOLUTE" ){
+			return perturbVal * step;
+		}
+		// fraction perturbation requested
+		else if ( type == "FRACTIONAL" ){
+			return val * perturbVal * step;
+		}
+		// oops
+		else{
+			return 0;
+		}
+	}
+	
+	//-------------------------------------------------------------------------
+	// Finds the vector in the direction of the gradient (determined by 
+	// perturbation) of a point with dimensions indList[]
+	//-------------------------------------------------------------------------
+	real[] bestGradient( string indList[], string limList[], real step ){
+		
+		// initialize values
+		real origPoint [] = {};
+		real perturbPoint [] = {};
+		real bestPoint[] = {};
+		real bestGradient[] = {};
+		real bestObj;
+		real gradientObjVal;
+		
+		real delta_x;
+		real delta_y;
+		
+	    origPoint = {};
+		perturbPoint = {};
+		bestPoint = {};
+		bestGradient = {};
+		
+		int i;
+		int j;
+	
+		// save starting point an initial objective point
+		for ( i = 0; i < indList.entries(); i++ ){
+			origPoint.append((indList[i] -> varName)->value);
+		}
+		real origObj = objPen();
+	    
+		// Find best gradient by perturbing each independent variable
+		for(i = 0; i < indList.entries(); i++){ 
+			// reset values to starting point
+		    for( j = 0; j< indList.entries(); j++ ){
+		    	( indList[j]->varName)->value = origPoint[j];
+		    }	
+		    // perturbation up
+			delta_x = perturb((indList[i]->varName)->value, indList[i]->perturbation, indList[i]->perturbationType, step);		
+			(indList[i]->varName)->value += delta_x;
+			real upChange = objPen() - origObj;
+			
+			// peturbation down
+			(indList[i] -> varName) -> value -= 2*delta_x;
+			real downChange = origObj - objPen();
+			
+			// determine relative gradient of this value
+			delta_y = ( upChange + downChange )/2.;
+			bestGradient.append(-1.*(delta_y / delta_x*(indList[i] -> varName) -> value));
+			
+		}
+		return bestGradient;
+	}
+	
+	//--------------------------------------------------------------------
+	// Returns new point from old point in direction vector
+	//--------------------------------------------------------------------
+	real[] searchInDirection(string indList[], real vector[], real step){
+		
+		int i;
+		real newPoint[];
+		real scaleVector[] = vector;
+		
+		// determine independent with largest effect
+		real maxGradient = 0;
+		for (i = 0; i < indList.entries(); i++){
+			if( abs( vector[i] ) > maxGradient ){
+				maxGradient =  abs( vector[i] );
+			}
+		}
+		
+		// scale the other independents to the independent with max effect
+		for (i = 0; i < indList.entries(); i++){	
+			scaleVector[i] = vector[i]/maxGradient;
+		}
+		
+		// determine the new value for the independents by having ever variable
+		// step along the scaled gradient
+		newPoint = {}
+		for(i = 0; i < indList.entries(); i++){
+			newPoint.append((indList[i]->varName)->value*( 1 + scaleVector[i] * step ));
+		}
+		
+		return newPoint;
+	}
+	
+	//----------------------------------------------------------------------
+	//  calulate function
+	//----------------------------------------------------------------------
+	void calculate(){
+		
+		real lastObj = -inf; // Negative Infinity; Technically unnecessary here, but good for understanding
+		real lastGradientObj = -inf;
+		real gradientObjVal;
+		real lastGradientObjVal;
+		real bestVals[];
+		real newPoint[]; 
+		real gradient[];
+		int i;
+		
+		// Take objective value
+		real objVal = objPen();
+		
+		// while the objective is not increasing more than a certain value by the user (MAY NEED MOMENTUM IN THE //FUTURE)
+		do
+		{
+			// perturb each variable and take the finite difference gradient
+			gradient = bestGradient(indList, limList, step);
+			
+			// while the objective function is not worsening
+			gradientObjVal = objVal;
+			
+			do {
+				// save the previous best value 
+				// ensures that the previous gradient is saved in case
+				// this new step is bad
+				for(i = 0; i < indList.entries(); i++){
+				    bestVals = newPoint;
+				}
+				lastGradientObjVal = gradientObjVal;
+
+				// search in the gradient objective
+				newPoint = searchInDirection(indList, gradient, step);
+				
+				for(i = 0; i < indList.entries(); i++){
+					(indList[i]->varName)->value = newPoint[i];
+				}
+				
+				gradientObjVal = objPen();
+			
+			}while( gradientObjVal < lastGradientObjVal );
+			
+            // record the design variables
+			for( i = 0; i < indList.entries(); i++ ){
+				(indList[i]->varName)->value = bestVals[i];
+			}
+			
+			// store the value
+			lastObj = objVal;
+			objVal = objPen();
+			// decrease the step size for the next loop
+			step = step*.5;
+			// increase the effect of the limit
+			s_Pen = s_Pen + 1;	
+			
+		} while(abs(( objVal - lastObj )/max( 1, abs( objVal))) > minObjDiff );
+	}
+	
+	//-------------------------------------------------------
+	// determine the value of objective
+	// with the effect of the limits
+	//-------------------------------------------------------
+	real objPen(){
+		
+		real bad_val;
+		bad_val = 0;
+		
+		// run the model
+		assembly->run();
+		
+		// loop through the active limits
+		int i;
+		for ( i = 0; i < limList.entries(); i++ ){
+        	
+        	// evaluate both sides of the expression
+        	real rhs = evalExpr(limList[i] -> bigger);
+        	real lhs = evalExpr(limList[i] -> smaller);
+			
+        	// if smaller > bigger then the constraint is violated
+			if ( lhs > rhs ){
+				// increase the overall badness by a specific amount
+				bad_val = bad_val + (lhs - rhs)/abs(rhs); // rhs can not evaluate to zero
+			}
+		}
+		return objective()*(1+s_Pen*bad_val);
+		
+	}
+}
